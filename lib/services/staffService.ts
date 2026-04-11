@@ -20,19 +20,32 @@ async function generateStaffId(role: string): Promise<string> {
 }
 
 export async function getAllStaff(): Promise<Staff[]> {
-  return db`
-    SELECT staff_id, name, designation, ward, nic, role, created_at
-    FROM staff
-    ORDER BY created_at DESC
-  ` as unknown as Staff[]
+  try {
+    const result = await db`
+      SELECT staff_id, name, designation, ward, nic, role, created_at
+      FROM staff
+      ORDER BY created_at DESC
+    `
+    // ✅ SAFE: Always return array
+   return Array.isArray(result) 
+      ? (result as unknown as Staff[])
+      : []
+  } catch (error) {
+    console.error('getAllStaff error:', error)
+    return []
+  }
 }
-
 export async function getStaffById(staffId: string): Promise<Staff | null> {
-  const rows = await db`
-    SELECT staff_id, name, designation, ward, nic, role, address, created_at
-    FROM staff WHERE staff_id = ${staffId}
-  `
-  return (rows[0] as Staff) ?? null
+  try {
+    const rows = await db`
+      SELECT staff_id, name, designation, ward, nic, role, address, created_at
+      FROM staff WHERE staff_id = ${staffId}
+    `
+    return Array.isArray(rows) && rows.length > 0 ? (rows[0] as Staff) : null
+  } catch (error) {
+    console.error('getStaffById error:', error)
+    return null
+  }
 }
 
 export async function createStaff(input: CreateStaffInput, adminId: string) {
@@ -63,5 +76,10 @@ export async function updateStaff(staffId: string, input: Partial<CreateStaffInp
 }
 
 export async function deleteStaff(staffId: string) {
-  await db`DELETE FROM staff WHERE staff_id = ${staffId}`
+  try {
+    await db`DELETE FROM staff WHERE staff_id = ${staffId}`
+  } catch (error) {
+    console.error('deleteStaff error:', error)
+    throw error // Re-throw for API handling
+  }
 }

@@ -7,17 +7,16 @@ import { z } from 'zod'
 import { ArrowRight, Copy, Check, Users } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
+
+
 const schema = z.object({
-  name:        z.string().min(2, 'Full name is required'),
-  nic:         z.string().min(9, 'Enter a valid NIC number'),
-  role: z.string()
+  name:     z.string().min(2, 'Full name is required').trim(),
+  nic:      z.string().min(9, 'Enter a valid NIC number').trim(),
+  role:     z.string()
     .min(1, 'Role is required')
-    .refine(val => {
-      return ['nurse', 'doctor', 'office_clerk', 'kitchen_clerk'].includes(val)
-    }, 'Please select a valid role'),
-  designation: z.string().min(2, 'Designation is required'),
-  ward:        z.string().min(1, 'Select a ward'),
-  address:     z.string().min(5, 'Address is required'),
+    .refine(val => ['nurse', 'doctor', 'office_clerk', 'kitchen_clerk'].includes(val)),
+  ward:     z.string().min(1, 'Select a ward'),
+  address:  z.string().min(5, 'Address is required').trim(),
 })
 
 type FormData = z.infer<typeof schema>
@@ -83,6 +82,13 @@ export default function NewStaffPage() {
 
   const { register, handleSubmit, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(schema),
+    defaultValues: {
+      name: '',
+      nic: '',
+      role: '',
+      ward: '',
+      address: '',
+    },
   })
 
   useEffect(() => {
@@ -243,40 +249,30 @@ export default function NewStaffPage() {
               <FieldError msg={errors.role?.message} />
             </div>
 
-            {/* Designation */}
-            <div>
-              <FieldLabel>Designation</FieldLabel>
-              <input
-                {...register('designation')}
-                placeholder="Senior Registrar"
-                className={inputBase}
-              />
-              <FieldError msg={errors.designation?.message} />
-            </div>
 
             {/* Ward */}
             <div>
-  <FieldLabel>Ward</FieldLabel>
-  <select
-    {...register('ward')}
-    className={cn(inputBase, errors.ward && 'border-red-300 ring-1 ring-red-200')}
-    disabled={!Array.isArray(wards) || wards.length === 0}
-  >
-    <option value="">Select ward</option>
-    {Array.isArray(wards) && wards.length > 0 ? (
-      wards.map((w: Ward) => (
-        <option key={w.ward_number} value={w.ward_number}>
-          {w.ward_name}
-        </option>
-      ))
-    ) : (
-      <option value="" disabled>
-        {loadingWards ? 'Loading wards...' : 'No wards available'}
-      </option>
-    )}
-  </select>
-  <FieldError msg={errors.ward?.message} />
-</div>
+                    <FieldLabel>Ward</FieldLabel>
+                    <select
+                      {...register('ward')}
+                      className={cn(inputBase, errors.ward && 'border-red-300 ring-1 ring-red-200')}
+                      disabled={!Array.isArray(wards) || wards.length === 0}
+                    >
+                      <option value="">Select ward</option>
+                      {Array.isArray(wards) && wards.length > 0 ? (
+                        wards.map((w: Ward) => (
+                          <option key={w.ward_number} value={w.ward_number}>
+                            {w.ward_name}
+                          </option>
+                        ))
+                      ) : (
+                        <option value="" disabled>
+                          {loadingWards ? 'Loading wards...' : 'No wards available'}
+                        </option>
+                      )}
+                    </select>
+                    <FieldError msg={errors.ward?.message} />
+                  </div>
 
             {/* Address */}
             <div>

@@ -1,4 +1,4 @@
-import { db } from '@/lib/db'
+import { getDb } from '@/lib/db'
 import bcrypt from 'bcryptjs'
 import { randomBytes } from 'crypto'
 import type { Staff, CreateStaffInput } from '@/types/user'
@@ -12,34 +12,53 @@ const ROLE_PREFIX: Record<string, string> = {
 
 async function generateStaffId(role: string): Promise<string> {
   const prefix = ROLE_PREFIX[role] ?? 'ST'
-  const result = await db`
+  const result = await getDb()`
     SELECT COUNT(*)::int AS count FROM staff WHERE staff_id LIKE ${prefix + '%'}
   `
   const next = String((result[0].count as number) + 1).padStart(3, '0')
   return `${prefix}${next}`
 }
-
+// JOIN ward table → get ward_name for display
 export async function getAllStaff(): Promise<Staff[]> {
   try {
-    const result = await db`
-      SELECT staff_id, name, designation, ward, nic, role, created_at
-      FROM staff
-      ORDER BY created_at DESC
+    const rows = await getDb()`
+      SELECT
+        s.staff_id,
+        s.admin_id,
+        s.name,
+        s.ward_number,
+        w.ward_name,
+        s.nic,
+        s.role,
+        s.address,
+        s.created_at
+      FROM staff s
+      LEFT JOIN ward w ON w.ward_number = s.ward_number
+      ORDER BY s.created_at DESC
     `
-    // ✅ SAFE: Always return array
-   return Array.isArray(result) 
-      ? (result as unknown as Staff[])
-      : []
+    return Array.isArray(rows) ? (rows as unknown as Staff[]) : []
   } catch (error) {
     console.error('getAllStaff error:', error)
     return []
   }
 }
+
 export async function getStaffById(staffId: string): Promise<Staff | null> {
   try {
-    const rows = await db`
-      SELECT staff_id, name, designation, ward, nic, role, address, created_at
-      FROM staff WHERE staff_id = ${staffId}
+    const rows = await getDb()`
+      SELECT
+        s.staff_id,
+        s.admin_id,
+        s.name,
+        s.ward_number,
+        w.ward_name,
+        s.nic,
+        s.role,
+        s.address,
+        s.created_at
+      FROM staff s
+      LEFT JOIN ward w ON w.ward_number = s.ward_number
+      WHERE s.staff_id = ${staffId}
     `
     return Array.isArray(rows) && rows.length > 0 ? (rows[0] as Staff) : null
   } catch (error) {
@@ -48,28 +67,40 @@ export async function getStaffById(staffId: string): Promise<Staff | null> {
   }
 }
 
-export async function createStaff(input: CreateStaffInput, adminId: string) {
-  const staff_id    = await generateStaffId(input.role)
-  const tempPassword = randomBytes(4).toString('hex').toUpperCase()
-  const password_hash = await bcrypt.hash(tempPassword, 10)
+export async function createStaff(input: CreateStaffInput, adminId = null) {
+  try {
+    const staff_id = await generateStaffId(input.role)
+    const tempPassword = randomBytes(4).toString('hex').toUpperCase()
+    const password_hash = await bcrypt.hash(tempPassword, 10)
 
-  await db`
-    INSERT INTO staff (staff_id, admin_id, name, nic, role, designation, ward, address, password_hash)
-    VALUES (
-      ${staff_id}, ${adminId}, ${input.name}, ${input.nic},
-      ${input.role}, ${input.designation}, ${input.ward},
-      ${input.address}, ${password_hash}
-    )
-  `
-  return { staff_id, tempPassword }
+    // Single query - handles both adminId present or null
+    const result = await getDb()`
+      INSERT INTO staff (
+        staff_id, ward_number, name, nic, role, 
+        address, password_hash, admin_id, created_at
+      ) VALUES (
+        ${staff_id}, ${input.ward}, ${input.name}, 
+        ${input.nic}, ${input.role}, ${input.address}, 
+        ${password_hash}, ${adminId}, NOW()
+      )
+      RETURNING staff_id
+    `
+
+    return { 
+  staff_id: result[0]?.staff_id || staff_id,  // ✅ CORRECT
+  tempPassword 
+}
+  } catch (error) {
+    console.error('createStaff error:', error)
+    throw error
+  }
 }
 
 export async function updateStaff(staffId: string, input: Partial<CreateStaffInput>) {
-  await db`
+  await getDb()`
     UPDATE staff SET
       name        = COALESCE(${input.name        ?? null}, name),
-      designation = COALESCE(${input.designation ?? null}, designation),
-      ward        = COALESCE(${input.ward        ?? null}, ward),
+      ward_number = COALESCE(${input.ward          ?? null}, ward_number),
       address     = COALESCE(${input.address     ?? null}, address)
     WHERE staff_id = ${staffId}
   `
@@ -77,7 +108,7 @@ export async function updateStaff(staffId: string, input: Partial<CreateStaffInp
 
 export async function deleteStaff(staffId: string) {
   try {
-    await db`DELETE FROM staff WHERE staff_id = ${staffId}`
+    await getDb()`DELETE FROM staff WHERE staff_id = ${staffId}`
   } catch (error) {
     console.error('deleteStaff error:', error)
     throw error // Re-throw for API handling
